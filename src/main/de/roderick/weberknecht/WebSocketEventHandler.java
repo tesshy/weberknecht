@@ -20,13 +20,10 @@ package de.roderick.weberknecht;
 public interface WebSocketEventHandler
 {
 	public void onOpen();
-
-
+	
+	
 	public void onMessage(WebSocketMessage message);
-
-
-	public void onError();
-
-
+	
+	
 	public void onClose();
 }

@@ -26,16 +26,17 @@ public class WebSocketReceiver
 		extends Thread
 {
 	private InputStream input = null;
+	private WebSocketConnection websocket = null;
 	private WebSocketEventHandler eventHandler = null;
 
 	private boolean stop = false;
 
 	
-	public WebSocketReceiver(InputStream input, WebSocketEventHandler eventHandler)
+	public WebSocketReceiver(InputStream input, WebSocketConnection websocket)
 	{
 		this.input = input;
-		this.eventHandler = eventHandler;
-		
+		this.websocket = websocket;
+		this.eventHandler = websocket.getEventHandler();
 	}
 
 
@@ -60,9 +61,12 @@ public class WebSocketReceiver
 				else if (frameStart == true){
 					messageBytes.add((byte)b);
 				}
+				else if (b == -1) {
+					handleError();
+				}
 			}
 			catch (IOException ioe) {
-				eventHandler.onClose();
+				handleError();
 			}
 		}
 	}
@@ -71,5 +75,18 @@ public class WebSocketReceiver
 	public void stopit()
 	{
 		stop = true;
+	}
+	
+	
+	public boolean isRunning()
+	{
+		return !stop;
+	}
+	
+	
+	private void handleError()
+	{
+		stopit();
+		websocket.handleReceiverError();
 	}
 }

@@ -65,6 +65,12 @@ public class WebSocketConnection
 		this.eventHandler = eventHandler;
 	}
 	
+	
+	public WebSocketEventHandler getEventHandler()
+	{
+		return this.eventHandler;
+	}
+	
 
 	public void connect()
 			throws WebSocketException
@@ -75,7 +81,7 @@ public class WebSocketConnection
 			output = new PrintStream(socket.getOutputStream());
 			
 			output.write(createHandshake().getBytes());
-//			output.flush(); // FIXME flush durch \r\n
+//			output.flush(); // FIXME flush()
 			
 			BufferedReader reader = new BufferedReader(new InputStreamReader(input));
 			String line = reader.readLine();
@@ -83,12 +89,12 @@ public class WebSocketConnection
 				throw new WebSocketException("unable to connect to server");
 			}
 			
-			// TODO response header ueberpruefen ...
+			// TODO response header checken ...
 			
-			eventHandler.onOpen();
-			receiver = new WebSocketReceiver(input, eventHandler);
+			receiver = new WebSocketReceiver(input, this);
 			receiver.start();
 			connected = true;
+			eventHandler.onOpen();
 		}
 		catch (IOException e) {
 			throw new WebSocketException("connect failed - " + e.getMessage());
@@ -130,14 +136,31 @@ public class WebSocketConnection
 		}
 	}
 	
+	
+	public void handleReceiverError()
+	{
+		try {
+			if (connected) {
+				close();
+			}
+		}
+		catch (WebSocketException wse) {
+			wse.printStackTrace();
+		}
+	}
+	
 
 	public void close()
 		throws WebSocketException
 	{
-		if (!connected) throw new WebSocketException("unable to close: not connected");
+		if (!connected) {
+			throw new WebSocketException("not connected");
+		}
 		connected = false;
 		
-		receiver.stopit();
+		if (receiver.isRunning()) {
+			receiver.stopit();
+		}
 		
 		try {
 			input.close();
@@ -145,8 +168,10 @@ public class WebSocketConnection
 			socket.close();
 		}
 		catch (IOException ioe) {
-			throw new WebSocketException("error while closing socket: " + ioe);
+			throw new WebSocketException("error while closing websocket connection: " + ioe);
 		}
+
+		eventHandler.onClose();
 	}
 	
 
@@ -181,7 +206,7 @@ public class WebSocketConnection
 		
 		Socket socket = null;
 		
-		if (scheme.equals("ws")) {
+		if (scheme != null && scheme.equals("ws")) {
 			if (port == -1) {
 				port = 80;
 			}
@@ -195,7 +220,7 @@ public class WebSocketConnection
 				throw new WebSocketException("unable to create socket to " + url);
 			}
 		}
-		else if (scheme.equals("wss")) {
+		else if (scheme != null && scheme.equals("wss")) {
 			if (port == -1) {
 				port = 443;
 			}

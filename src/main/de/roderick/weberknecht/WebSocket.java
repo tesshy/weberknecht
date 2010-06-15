@@ -21,6 +21,9 @@ public interface WebSocket
 {
 	public void setEventHandler(WebSocketEventHandler eventHandler);
 	
+	
+	public WebSocketEventHandler getEventHandler();
+	
 
 	public void connect()
 			throws WebSocketException;
