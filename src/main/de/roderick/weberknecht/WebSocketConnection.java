@@ -16,15 +16,16 @@
 
 package de.roderick.weberknecht;
 
-import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.InputStreamReader;
 import java.io.PrintStream;
 import java.io.UnsupportedEncodingException;
 import java.net.Socket;
 import java.net.URI;
 import java.net.UnknownHostException;
+import java.nio.charset.Charset;
+import java.util.ArrayList;
+import java.util.HashMap;
 import javax.net.SocketFactory;
 import javax.net.ssl.SSLSocketFactory;
 
@@ -81,15 +82,44 @@ public class WebSocketConnection
 			output = new PrintStream(socket.getOutputStream());
 			
 			output.write(createHandshake().getBytes());
-//			output.flush(); // FIXME flush()
+						
+			boolean handshake = true;
+			int len = 500;
+			byte[] buffer = new byte[len];
+			int pos = 0;
+			ArrayList<String> handshakeLines = new ArrayList<String>();
 			
-			BufferedReader reader = new BufferedReader(new InputStreamReader(input));
-			String line = reader.readLine();
-			if (!line.equals("HTTP/1.1 101 Web Socket Protocol Handshake")) {
+			while (handshake) {
+				int b = input.read();
+				buffer[pos] = (byte) b;
+				pos += 1;
+				
+				if (buffer[pos-1] == 0x0A && buffer[pos-2] == 0x0D) {
+					String line = new String(buffer, Charset.forName("UTF-8"));
+					if (line.trim().equals("")) {
+						handshake = false;
+					}
+					else {
+						handshakeLines.add(line.trim());
+					}
+					buffer = new byte[len];
+					pos = 0;
+				}
+			}
+			
+			if (!handshakeLines.get(0).equals("HTTP/1.1 101 Web Socket Protocol Handshake")) {
 				throw new WebSocketException("unable to connect to server");
 			}
 			
-			// TODO response header checken ...
+			handshakeLines.remove(0);
+			
+			HashMap<String, String> headers = new HashMap<String, String>();
+			for (String line : handshakeLines) {
+				String[] keyValue = line.split(":", 2);
+				headers.put(keyValue[0].trim(), keyValue[1].trim());
+			}
+			
+			// TODO check headers ...
 			
 			receiver = new WebSocketReceiver(input, this);
 			receiver.start();
@@ -110,7 +140,7 @@ public class WebSocketConnection
 			output.write(0x00);
 			output.write(data.getBytes(("UTF-8")));
 			output.write(0xff);
-			output.write("\r\n".getBytes()); // FIXME flush()
+			output.write("\r\n".getBytes());
 		}
 		catch (UnsupportedEncodingException uee) {
 			throw new WebSocketException("unable to send data: unsupported encoding " + uee);
@@ -127,9 +157,9 @@ public class WebSocketConnection
 		if (!connected) throw new WebSocketException("not connected");
 		try {
 			output.write(0x80);
-			output.write(data.length); // FIXME evtl. fehlerhaft
+			output.write(data.length);
 			output.write(data);
-			output.write("\r\n".getBytes()); // FIXME flush()
+			output.write("\r\n".getBytes());
 		}
 		catch (IOException ioe) {
 			throw new WebSocketException("unable to send data: " + ioe);

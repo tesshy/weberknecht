@@ -42,6 +42,6 @@ public class WebSocketMessage
 	
 	public Object getObject()
 	{
-		return null; // TODO
+		return null; // TODO implement
 	}
 }
