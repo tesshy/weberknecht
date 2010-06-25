@@ -34,7 +34,6 @@ public class WebSocketConnection
 		implements WebSocket
 {
 	private URI url = null;
-	private String protocol = null;
 	private WebSocketEventHandler eventHandler = null;
 	
 	private boolean connected = false;
@@ -44,6 +43,7 @@ public class WebSocketConnection
 	private PrintStream output = null;
 	
 	private WebSocketReceiver receiver = null;
+	private WebSocketHandshake handshake = null;
 	
 	
 	public WebSocketConnection(URI url)
@@ -57,7 +57,7 @@ public class WebSocketConnection
 			throws WebSocketException
 	{
 		this.url = url;
-		this.protocol = protocol;
+		handshake = new WebSocketHandshake(url, protocol);
 	}
 	
 
@@ -81,32 +81,45 @@ public class WebSocketConnection
 			input = socket.getInputStream();
 			output = new PrintStream(socket.getOutputStream());
 			
-			output.write(createHandshake().getBytes());
+			System.out.println(handshake.getHandshake());
+			output.write(handshake.getHandshake().getBytes());
 						
-			boolean handshake = true;
+			boolean handshakeComplete = false;
+			boolean header = true;
 			int len = 500;
 			byte[] buffer = new byte[len];
 			int pos = 0;
 			ArrayList<String> handshakeLines = new ArrayList<String>();
 			
-			while (handshake) {
+			byte[] serverResponse = new byte[16];
+			
+			while (!handshakeComplete) {
 				int b = input.read();
 				buffer[pos] = (byte) b;
 				pos += 1;
 				
-				if (buffer[pos-1] == 0x0A && buffer[pos-2] == 0x0D) {
+				if (!header) {
+					serverResponse[pos-1] = (byte)b;
+					if (pos == 16) {
+						handshakeComplete = true;
+					}
+				}
+				else if (buffer[pos-1] == 0x0A && buffer[pos-2] == 0x0D) {
 					String line = new String(buffer, Charset.forName("UTF-8"));
+					System.out.println(line);
 					if (line.trim().equals("")) {
-						handshake = false;
+						header = false;
 					}
 					else {
 						handshakeLines.add(line.trim());
 					}
+					
 					buffer = new byte[len];
 					pos = 0;
 				}
 			}
 			
+			// FIXME in draft-ietf-hybi-thewebsocketprotocol-00 wird "WebSocket" zusammen geschrieben
 			if (!handshakeLines.get(0).equals("HTTP/1.1 101 Web Socket Protocol Handshake")) {
 				throw new WebSocketException("unable to connect to server");
 			}
@@ -115,11 +128,11 @@ public class WebSocketConnection
 			
 			HashMap<String, String> headers = new HashMap<String, String>();
 			for (String line : handshakeLines) {
-				String[] keyValue = line.split(":", 2);
-				headers.put(keyValue[0].trim(), keyValue[1].trim());
+				String[] keyValue = line.split(": ", 2);
+				headers.put(keyValue[0], keyValue[1]);
 			}
 			
-			// TODO check headers ...
+			// TODO check header
 			
 			receiver = new WebSocketReceiver(input, this);
 			receiver.start();
@@ -135,7 +148,10 @@ public class WebSocketConnection
 	public void send(String data)
 			throws WebSocketException
 	{
-		if (!connected) throw new WebSocketException("not connected");
+		if (!connected) {
+			throw new WebSocketException("not connected");
+		}
+		
 		try {
 			output.write(0x00);
 			output.write(data.getBytes(("UTF-8")));
@@ -154,7 +170,10 @@ public class WebSocketConnection
 	public void send(byte[] data)
 			throws WebSocketException
 	{
-		if (!connected) throw new WebSocketException("not connected");
+		if (!connected) {
+			throw new WebSocketException("not connected");
+		}
+		
 		try {
 			output.write(0x80);
 			output.write(data.length);
@@ -186,8 +205,9 @@ public class WebSocketConnection
 		if (!connected) {
 			throw new WebSocketException("not connected");
 		}
-		connected = false;
 		
+		sendCloseHandshake();
+				
 		if (receiver.isRunning()) {
 			receiver.stopit();
 		}
@@ -204,26 +224,23 @@ public class WebSocketConnection
 		eventHandler.onClose();
 	}
 	
-
-	private String createHandshake()
+	
+	private void sendCloseHandshake()
+		throws WebSocketException
 	{
-		String path = url.getPath();
-		String host = url.getHost();
-		String origin = "http://" + host;
-		
-		String handshake = "GET " + path + " HTTP/1.1\r\n" +
-							"Upgrade: WebSocket\r\n" +
-							"Connection: Upgrade\r\n" +
-							"Host: " + host + "\r\n" +
-							"Origin: " + origin	+ "\r\n";
-		
-		if (protocol != null) {
-			handshake += "WebSocket-Protocol: " + protocol + "\r\n";
+		if (!connected) {
+			throw new WebSocketException("not connected");
 		}
 		
-		handshake += "\r\n";
-		
-		return handshake;
+		try {
+			output.write(0xff00);
+			output.write("\r\n".getBytes());
+		}
+		catch (IOException ioe) {
+			throw new WebSocketException("unable to send close handshake: " + ioe);
+		}
+
+		connected = false;
 	}
 	
 
