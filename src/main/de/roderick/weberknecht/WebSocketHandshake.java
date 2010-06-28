@@ -17,9 +17,9 @@
 package de.roderick.weberknecht;
 
 import java.net.URI;
+import java.nio.ByteBuffer;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.util.Random;
 
 
 public class WebSocketHandshake
@@ -60,7 +60,7 @@ public class WebSocketHandshake
 				"Sec-WebSocket-Key1: " + key1 + "\r\n" +
 				"Sec-WebSocket-Origin: " + origin	+ "\r\n" +
 				"\r\n" +
-				key3 + "\r\n";
+				key3;
 		
 		return handshake;
 	}
@@ -103,8 +103,19 @@ public class WebSocketHandshake
 		
 		key3 = createRandomBytes();
 		
-		String challenge = Integer.toString(number1) + Integer.toString(number2) + key3;
-		expectedServerResponse = md5(challenge);
+		ByteBuffer buffer = ByteBuffer.allocate(4);
+		buffer.putInt(number1);
+		byte[] number1Array = buffer.array();
+		buffer = ByteBuffer.allocate(4);
+		buffer.putInt(number2);
+		byte[] number2Array = buffer.array();
+		
+		byte[] challenge = new byte[16];				
+		System.arraycopy(number1Array, 0, challenge, 0, 4);
+		System.arraycopy(number2Array, 0, challenge, 4, 4);
+		System.arraycopy(key3.getBytes(), 0, challenge, 8, 8);
+
+		expectedServerResponse = new String(md5(challenge));
 	}
 	
 	
@@ -148,25 +159,16 @@ public class WebSocketHandshake
 	
 	private String createRandomBytes()
 	{
-		byte[] bytes = new byte[8];
-		
-		Random random = new Random();
-		random.nextBytes(bytes);
-		
-		return new String(bytes);
+		int rand = rand(10000000, 99999999);
+		return String.valueOf(rand);
 	}
 	
 	
-	private String md5(String text)
+	private byte[] md5(byte[] text)
 	{
-		MessageDigest algorithm;
 		try {
-			algorithm = MessageDigest.getInstance("MD5");
-			algorithm.reset();
-			algorithm.update(text.getBytes());
-			byte messageDigest[] = algorithm.digest();
-			
-			return new String(messageDigest);
+			MessageDigest md = MessageDigest.getInstance("MD5");
+			return md.digest(text);
 		}
 		catch (NoSuchAlgorithmException e) {
 			e.printStackTrace();

@@ -81,12 +81,11 @@ public class WebSocketConnection
 			input = socket.getInputStream();
 			output = new PrintStream(socket.getOutputStream());
 			
-			System.out.println(handshake.getHandshake());
 			output.write(handshake.getHandshake().getBytes());
 						
 			boolean handshakeComplete = false;
 			boolean header = true;
-			int len = 500;
+			int len = 1000;
 			byte[] buffer = new byte[len];
 			int pos = 0;
 			ArrayList<String> handshakeLines = new ArrayList<String>();
@@ -106,7 +105,6 @@ public class WebSocketConnection
 				}
 				else if (buffer[pos-1] == 0x0A && buffer[pos-2] == 0x0D) {
 					String line = new String(buffer, Charset.forName("UTF-8"));
-					System.out.println(line);
 					if (line.trim().equals("")) {
 						header = false;
 					}
@@ -122,6 +120,10 @@ public class WebSocketConnection
 			// FIXME in draft-ietf-hybi-thewebsocketprotocol-00 wird "WebSocket" zusammen geschrieben
 			if (!handshakeLines.get(0).equals("HTTP/1.1 101 Web Socket Protocol Handshake")) {
 				throw new WebSocketException("unable to connect to server");
+			}
+			
+			if (!handshake.verifyServerResponse(new String(serverResponse))) {
+				throw new WebSocketException("not a WebSocket Server");
 			}
 			
 			handshakeLines.remove(0);
