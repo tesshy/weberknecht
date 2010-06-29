@@ -48,7 +48,7 @@ public class WebSocketReceiver
 		while (!stop) {
 			try {
 				int b = input.read();
-				// TODO unterscheidung zwischen text und binary frames
+				// TODO support binary frames
 				if (b == 0x00) {
 					frameStart = true;
 				}

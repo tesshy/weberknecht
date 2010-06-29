@@ -20,14 +20,16 @@ import java.net.URI;
 import java.nio.ByteBuffer;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.HashMap;
 
 
 public class WebSocketHandshake
 {	
 	private String key1 = null;
 	private String key2 = null;
-	private String key3 = null;
+	private byte[] key3 = null;
 	private String expectedServerResponse = null;
+	private String origin = null;
 	
 	private URI url = null;
 	private String protocol = null;
@@ -41,11 +43,11 @@ public class WebSocketHandshake
 	}
 	
 	
-	public String getHandshake()
+	public byte[] getHandshake()
 	{
 		String path = url.getPath();
 		String host = url.getHost();
-		String origin = "http://" + host;
+		origin = "http://" + host;
 		
 		String handshake = "GET " + path + " HTTP/1.1\r\n" +
 				"Host: " + host + "\r\n" +
@@ -59,16 +61,61 @@ public class WebSocketHandshake
 		handshake += "Upgrade: WebSocket\r\n" +
 				"Sec-WebSocket-Key1: " + key1 + "\r\n" +
 				"Sec-WebSocket-Origin: " + origin	+ "\r\n" +
-				"\r\n" +
-				key3;
+				"\r\n";
 		
-		return handshake;
+		byte[] handshakeBytes = new byte[handshake.getBytes().length + 8];
+		System.arraycopy(handshake.getBytes(), 0, handshakeBytes, 0, handshake.getBytes().length);
+		System.arraycopy(key3, 0, handshakeBytes, handshake.getBytes().length, 8);		
+		
+		return handshakeBytes;
 	}
 	
 	
-	public boolean verifyServerResponse(String response)
+	public void verifyServerResponse(byte[] bytes)
+		throws WebSocketException
 	{
-		return response.equals(expectedServerResponse);
+		String response = new String(bytes);
+		if (!response.equals(expectedServerResponse)) {
+			throw new WebSocketException("not a WebSocket Server");
+		}
+	}
+	
+	
+	public void verifyServerStatusLine(String statusLine)
+		throws WebSocketException
+	{
+		int statusCode = Integer.valueOf(statusLine.substring(9, 12));
+		
+		if (statusCode == 407) {
+			throw new WebSocketException("connection failed: proxy authentication not supported");
+		}
+		else if (statusCode == 404) {
+			throw new WebSocketException("connection failed: 404 not found");
+		}
+		else if (statusCode != 101) {
+			throw new WebSocketException("connection failed: unknown status code " + statusCode);
+		}
+	}
+	
+	
+	public void verifyServerHandshakeHeaders(HashMap<String, String> headers)
+		throws WebSocketException
+	{
+		if (!headers.get("Upgrade").equals("WebSocket")) {
+			throw new WebSocketException("connection failed: missing header field in server handshake: Upgrade");
+		}
+		else if (!headers.get("Connection").equals("Upgrade")) {
+			throw new WebSocketException("connection failed: missing header field in server handshake: Connection");
+		}
+		else if (!headers.get("Sec-WebSocket-Origin").equals(origin)) {
+			throw new WebSocketException("connection failed: missing header field in server handshake: Sec-WebSocket-Origin");
+		}
+		
+		// TODO see 4.1. step 41
+//		else if (!headers.get("Sec-WebSocket-Location").equals(url.toASCIIString())) {
+//			System.out.println("location: " + url.toASCIIString());
+//		}
+//		else if protocol
 	}
 	
 	
@@ -76,7 +123,7 @@ public class WebSocketHandshake
 	{
 		return expectedServerResponse;
 	}
-	
+		
 	
 	private void generateKeys()
 	{
@@ -113,7 +160,7 @@ public class WebSocketHandshake
 		byte[] challenge = new byte[16];				
 		System.arraycopy(number1Array, 0, challenge, 0, 4);
 		System.arraycopy(number2Array, 0, challenge, 4, 4);
-		System.arraycopy(key3.getBytes(), 0, challenge, 8, 8);
+		System.arraycopy(key3, 0, challenge, 8, 8);
 
 		expectedServerResponse = new String(md5(challenge));
 	}
@@ -157,18 +204,23 @@ public class WebSocketHandshake
 	}
 	
 	
-	private String createRandomBytes()
+	private byte[] createRandomBytes()
 	{
-		int rand = rand(10000000, 99999999);
-		return String.valueOf(rand);
+		byte[] bytes = new byte[8];
+		
+		for (int i = 0; i < 8; i++) {
+			bytes[i] = (byte) rand(0, 255);
+		}
+		
+		return bytes;
 	}
 	
 	
-	private byte[] md5(byte[] text)
+	private byte[] md5(byte[] bytes)
 	{
 		try {
 			MessageDigest md = MessageDigest.getInstance("MD5");
-			return md.digest(text);
+			return md.digest(bytes);
 		}
 		catch (NoSuchAlgorithmException e) {
 			e.printStackTrace();

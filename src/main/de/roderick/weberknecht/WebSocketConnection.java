@@ -81,7 +81,7 @@ public class WebSocketConnection
 			input = socket.getInputStream();
 			output = new PrintStream(socket.getOutputStream());
 			
-			output.write(handshake.getHandshake().getBytes());
+			output.write(handshake.getHandshake());
 						
 			boolean handshakeComplete = false;
 			boolean header = true;
@@ -117,14 +117,8 @@ public class WebSocketConnection
 				}
 			}
 			
-			// FIXME in draft-ietf-hybi-thewebsocketprotocol-00 wird "WebSocket" zusammen geschrieben
-			if (!handshakeLines.get(0).equals("HTTP/1.1 101 Web Socket Protocol Handshake")) {
-				throw new WebSocketException("unable to connect to server");
-			}
-			
-			if (!handshake.verifyServerResponse(new String(serverResponse))) {
-				throw new WebSocketException("not a WebSocket Server");
-			}
+			handshake.verifyServerStatusLine(handshakeLines.get(0));
+			handshake.verifyServerResponse(serverResponse);
 			
 			handshakeLines.remove(0);
 			
@@ -133,16 +127,18 @@ public class WebSocketConnection
 				String[] keyValue = line.split(": ", 2);
 				headers.put(keyValue[0], keyValue[1]);
 			}
-			
-			// TODO check header
+			handshake.verifyServerHandshakeHeaders(headers);
 			
 			receiver = new WebSocketReceiver(input, this);
 			receiver.start();
 			connected = true;
 			eventHandler.onOpen();
 		}
-		catch (IOException e) {
-			throw new WebSocketException("connect failed - " + e.getMessage());
+		catch (WebSocketException wse) {
+			throw wse;
+		}
+		catch (IOException ioe) {
+			throw new WebSocketException("connect failed - " + ioe.getMessage());
 		}
 	}
 	
