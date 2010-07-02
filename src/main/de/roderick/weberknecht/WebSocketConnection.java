@@ -23,7 +23,6 @@ import java.io.UnsupportedEncodingException;
 import java.net.Socket;
 import java.net.URI;
 import java.net.UnknownHostException;
-import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.HashMap;
 import javax.net.SocketFactory;
@@ -104,7 +103,7 @@ public class WebSocketConnection
 					}
 				}
 				else if (buffer[pos-1] == 0x0A && buffer[pos-2] == 0x0D) {
-					String line = new String(buffer, Charset.forName("UTF-8"));
+					String line = new String(buffer, "UTF-8");
 					if (line.trim().equals("")) {
 						header = false;
 					}
@@ -138,7 +137,7 @@ public class WebSocketConnection
 			throw wse;
 		}
 		catch (IOException ioe) {
-			throw new WebSocketException("connect failed - " + ioe.getMessage());
+			throw new WebSocketException("error while connecting: " + ioe.getMessage(), ioe);
 		}
 	}
 	
@@ -147,7 +146,7 @@ public class WebSocketConnection
 			throws WebSocketException
 	{
 		if (!connected) {
-			throw new WebSocketException("not connected");
+			throw new WebSocketException("error while sending text data: not connected");
 		}
 		
 		try {
@@ -157,10 +156,10 @@ public class WebSocketConnection
 			output.write("\r\n".getBytes());
 		}
 		catch (UnsupportedEncodingException uee) {
-			throw new WebSocketException("unable to send data: unsupported encoding " + uee);
+			throw new WebSocketException("error while sending text data: unsupported encoding", uee);
 		}
 		catch (IOException ioe) {
-			throw new WebSocketException("unable to send data: " + ioe);
+			throw new WebSocketException("error while sending text data", ioe);
 		}
 	}
 	
@@ -169,7 +168,7 @@ public class WebSocketConnection
 			throws WebSocketException
 	{
 		if (!connected) {
-			throw new WebSocketException("not connected");
+			throw new WebSocketException("error while sending binary data: not connected");
 		}
 		
 		try {
@@ -179,7 +178,7 @@ public class WebSocketConnection
 			output.write("\r\n".getBytes());
 		}
 		catch (IOException ioe) {
-			throw new WebSocketException("unable to send data: " + ioe);
+			throw new WebSocketException("error while sending binary data: ", ioe);
 		}
 	}
 	
@@ -201,7 +200,7 @@ public class WebSocketConnection
 		throws WebSocketException
 	{
 		if (!connected) {
-			throw new WebSocketException("not connected");
+			throw new WebSocketException("error while closing connection: not connected");
 		}
 		
 		sendCloseHandshake();
@@ -216,7 +215,7 @@ public class WebSocketConnection
 			socket.close();
 		}
 		catch (IOException ioe) {
-			throw new WebSocketException("error while closing websocket connection: " + ioe);
+			throw new WebSocketException("error while closing websocket connection: ", ioe);
 		}
 
 		eventHandler.onClose();
@@ -227,7 +226,7 @@ public class WebSocketConnection
 		throws WebSocketException
 	{
 		if (!connected) {
-			throw new WebSocketException("not connected");
+			throw new WebSocketException("error while sending close handshake: not connected");
 		}
 		
 		try {
@@ -235,7 +234,7 @@ public class WebSocketConnection
 			output.write("\r\n".getBytes());
 		}
 		catch (IOException ioe) {
-			throw new WebSocketException("unable to send close handshake: " + ioe);
+			throw new WebSocketException("error while sending close handshake", ioe);
 		}
 
 		connected = false;
@@ -259,10 +258,10 @@ public class WebSocketConnection
 				socket = new Socket(host, port);
 			}
 			catch (UnknownHostException uhe) {
-				throw new WebSocketException("unknown host: " + host);
+				throw new WebSocketException("unknown host: " + host, uhe);
 			}
 			catch (IOException ioe) {
-				throw new WebSocketException("unable to create socket to " + url);
+				throw new WebSocketException("error while creating socket to " + url, ioe);
 			}
 		}
 		else if (scheme != null && scheme.equals("wss")) {
@@ -274,10 +273,10 @@ public class WebSocketConnection
 				socket = factory.createSocket(host, port);
 			}
 			catch (UnknownHostException uhe) {
-				throw new WebSocketException("unknown host: " + host);
+				throw new WebSocketException("unknown host: " + host, uhe);
 			}
 			catch (IOException ioe) {
-				throw new WebSocketException("unable to create secure socket to " + url);
+				throw new WebSocketException("error while creating secure socket to " + url, ioe);
 			}
 		}
 		else {

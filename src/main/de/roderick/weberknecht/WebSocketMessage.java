@@ -16,7 +16,7 @@
 
 package de.roderick.weberknecht;
 
-import java.nio.charset.Charset;
+import java.io.UnsupportedEncodingException;
 
 
 public class WebSocketMessage
@@ -36,7 +36,12 @@ public class WebSocketMessage
 		for (int i = 0; i < this.message.length; i++) {
 			message[i] = this.message[i];
 		}
-		return new String(message, Charset.forName("UTF-8"));
+		try {
+			return new String(message, "UTF-8");
+		}
+		catch (UnsupportedEncodingException e) {
+			return null;
+		}
 	}
 	
 	

@@ -20,6 +20,7 @@ import java.net.URI;
 import java.nio.ByteBuffer;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.Arrays;
 import java.util.HashMap;
 
 
@@ -28,10 +29,10 @@ public class WebSocketHandshake
 	private String key1 = null;
 	private String key2 = null;
 	private byte[] key3 = null;
-	private String expectedServerResponse = null;
-	private String origin = null;
+	private byte[] expectedServerResponse = null;
 	
 	private URI url = null;
+	private String origin = null;
 	private String protocol = null;
 	
 	
@@ -74,8 +75,7 @@ public class WebSocketHandshake
 	public void verifyServerResponse(byte[] bytes)
 		throws WebSocketException
 	{
-		String response = new String(bytes);
-		if (!response.equals(expectedServerResponse)) {
+		if (!Arrays.equals(bytes, expectedServerResponse)) {
 			throw new WebSocketException("not a WebSocket Server");
 		}
 	}
@@ -117,12 +117,6 @@ public class WebSocketHandshake
 //		}
 //		else if protocol
 	}
-	
-	
-	public String getExpectedResponse()
-	{
-		return expectedServerResponse;
-	}
 		
 	
 	private void generateKeys()
@@ -162,7 +156,7 @@ public class WebSocketHandshake
 		System.arraycopy(number2Array, 0, challenge, 4, 4);
 		System.arraycopy(key3, 0, challenge, 8, 8);
 
-		expectedServerResponse = new String(md5(challenge));
+		expectedServerResponse = md5(challenge);
 	}
 	
 	
@@ -223,7 +217,6 @@ public class WebSocketHandshake
 			return md.digest(bytes);
 		}
 		catch (NoSuchAlgorithmException e) {
-			e.printStackTrace();
 			return null;
 		}
 	}

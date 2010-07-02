@@ -27,4 +27,10 @@ public class WebSocketException
 	{
 		super(message);
 	}
+	
+	
+	public WebSocketException(String message, Throwable t)
+	{
+		super(message, t);
+	}
 }
