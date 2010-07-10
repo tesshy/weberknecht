@@ -35,7 +35,7 @@ public class WebSocketConnection
 	private URI url = null;
 	private WebSocketEventHandler eventHandler = null;
 	
-	private boolean connected = false;
+	private volatile boolean connected = false;
 	
 	private Socket socket = null;
 	private InputStream input = null;
@@ -196,11 +196,11 @@ public class WebSocketConnection
 	}
 	
 
-	public void close()
+	public synchronized void close()
 		throws WebSocketException
 	{
 		if (!connected) {
-			throw new WebSocketException("error while closing connection: not connected");
+			return;
 		}
 		
 		sendCloseHandshake();
