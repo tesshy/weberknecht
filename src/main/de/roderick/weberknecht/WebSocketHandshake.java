@@ -61,7 +61,7 @@ public class WebSocketHandshake
 		
 		handshake += "Upgrade: WebSocket\r\n" +
 				"Sec-WebSocket-Key1: " + key1 + "\r\n" +
-				"Sec-WebSocket-Origin: " + origin	+ "\r\n" +
+				"Origin: " + origin + "\r\n" +
 				"\r\n";
 		
 		byte[] handshakeBytes = new byte[handshake.getBytes().length + 8];
