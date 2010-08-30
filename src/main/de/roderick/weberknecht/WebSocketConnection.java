@@ -76,6 +76,10 @@ public class WebSocketConnection
 			throws WebSocketException
 	{
 		try {
+			if (connected) {
+				throw new WebSocketException("already connected");
+			}
+			
 			socket = createSocket();
 			input = socket.getInputStream();
 			output = new PrintStream(socket.getOutputStream());
@@ -142,7 +146,7 @@ public class WebSocketConnection
 	}
 	
 
-	public void send(String data)
+	public synchronized void send(String data)
 			throws WebSocketException
 	{
 		if (!connected) {
@@ -163,24 +167,24 @@ public class WebSocketConnection
 		}
 	}
 	
-
-	public void send(byte[] data)
-			throws WebSocketException
-	{
-		if (!connected) {
-			throw new WebSocketException("error while sending binary data: not connected");
-		}
-		
-		try {
-			output.write(0x80);
-			output.write(data.length);
-			output.write(data);
-			output.write("\r\n".getBytes());
-		}
-		catch (IOException ioe) {
-			throw new WebSocketException("error while sending binary data: ", ioe);
-		}
-	}
+	
+//	public synchronized void send(byte[] data)
+//			throws WebSocketException
+//	{
+//		if (!connected) {
+//			throw new WebSocketException("error while sending binary data: not connected");
+//		}
+//		
+//		try {
+//			output.write(0x80);
+//			output.write(data.length);
+//			output.write(data);
+//			output.write("\r\n".getBytes());
+//		}
+//		catch (IOException ioe) {
+//			throw new WebSocketException("error while sending binary data: ", ioe);
+//		}
+//	}
 	
 	
 	public void handleReceiverError()
@@ -209,20 +213,13 @@ public class WebSocketConnection
 			receiver.stopit();
 		}
 		
-		try {
-			input.close();
-			output.close();
-			socket.close();
-		}
-		catch (IOException ioe) {
-			throw new WebSocketException("error while closing websocket connection: ", ioe);
-		}
+		closeStreams();
 
 		eventHandler.onClose();
 	}
 	
 	
-	private void sendCloseHandshake()
+	private synchronized void sendCloseHandshake()
 		throws WebSocketException
 	{
 		if (!connected) {
@@ -284,5 +281,19 @@ public class WebSocketConnection
 		}
 		
 		return socket;
+	}
+	
+	
+	private void closeStreams()
+		throws WebSocketException
+	{
+		try {
+			input.close();
+			output.close();
+			socket.close();
+		}
+		catch (IOException ioe) {
+			throw new WebSocketException("error while closing websocket connection: ", ioe);
+		}
 	}
 }

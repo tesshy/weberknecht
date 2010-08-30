@@ -39,14 +39,8 @@ public class WebSocketMessage
 		try {
 			return new String(message, "UTF-8");
 		}
-		catch (UnsupportedEncodingException e) {
+		catch (UnsupportedEncodingException uee) {
 			return null;
 		}
-	}
-	
-	
-	public Object getObject()
-	{
-		return null; // TODO implement
 	}
 }

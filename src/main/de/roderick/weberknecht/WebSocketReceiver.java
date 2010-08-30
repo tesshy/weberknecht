@@ -29,7 +29,7 @@ public class WebSocketReceiver
 	private WebSocketConnection websocket = null;
 	private WebSocketEventHandler eventHandler = null;
 
-	private boolean stop = false;
+	private volatile boolean stop = false;
 
 	
 	public WebSocketReceiver(InputStream input, WebSocketConnection websocket)
@@ -48,7 +48,6 @@ public class WebSocketReceiver
 		while (!stop) {
 			try {
 				int b = input.read();
-				// TODO support binary frames
 				if (b == 0x00) {
 					frameStart = true;
 				}
