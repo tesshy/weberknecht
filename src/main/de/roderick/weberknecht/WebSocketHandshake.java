@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2010 Roderick Baier
+ *  Copyright (C) 2011 Roderick Baier
  *  
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -188,7 +188,7 @@ public class WebSocketHandshake
 	private String insertSpaces(String key, int spaces)
 	{
 		for (int i = 0; i < spaces; i++) {
-			int split = rand(0, key.length());
+			int split = rand(1, key.length()-1);
 			String part1 = key.substring(0, split);
 			String part2 = key.substring(split);
 			key = part1 + " " + part2;
