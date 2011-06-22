@@ -8,6 +8,7 @@ draft-ietf-hybi-thewebsocketprotocol-00 (May 23, 2010) for use in Java SE or And
 Usage
 -----
 This short code snippet shows how to integrate weberknecht in your application:
+
 	try {
 			URI url = new URI("ws://127.0.0.1:8080/test");
 			WebSocket websocket = new WebSocketConnection(url);
