@@ -157,7 +157,7 @@ public class WebSocketConnection
 			output.write(0x00);
 			output.write(data.getBytes(("UTF-8")));
 			output.write(0xff);
-			output.write("\r\n".getBytes());
+                        output.flush();
 		}
 		catch (UnsupportedEncodingException uee) {
 			throw new WebSocketException("error while sending text data: unsupported encoding", uee);
