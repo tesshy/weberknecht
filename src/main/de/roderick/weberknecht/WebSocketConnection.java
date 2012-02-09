@@ -16,9 +16,9 @@
 
 package de.roderick.weberknecht;
 
+import java.io.BufferedOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.PrintStream;
 import java.io.UnsupportedEncodingException;
 import java.net.Socket;
 import java.net.URI;
@@ -30,76 +30,77 @@ import javax.net.ssl.SSLSocketFactory;
 
 
 public class WebSocketConnection
-		implements WebSocket
+implements WebSocket
 {
 	private URI url = null;
 	private WebSocketEventHandler eventHandler = null;
-	
+
 	private volatile boolean connected = false;
-	
+
 	private Socket socket = null;
 	private InputStream input = null;
-	private PrintStream output = null;
-	
+	private BufferedOutputStream output = null;
+
 	private WebSocketReceiver receiver = null;
 	private WebSocketHandshake handshake = null;
-	
-	
+
+
 	public WebSocketConnection(URI url)
 			throws WebSocketException
-	{
+			{
 		this(url, null);
-	}
-	
+			}
+
 
 	public WebSocketConnection(URI url, String protocol)
 			throws WebSocketException
-	{
+			{
 		this.url = url;
 		handshake = new WebSocketHandshake(url, protocol);
-	}
-	
+			}
+
 
 	public void setEventHandler(WebSocketEventHandler eventHandler)
 	{
 		this.eventHandler = eventHandler;
 	}
-	
-	
+
+
 	public WebSocketEventHandler getEventHandler()
 	{
 		return this.eventHandler;
 	}
-	
+
 
 	public void connect()
 			throws WebSocketException
-	{
+			{
 		try {
 			if (connected) {
 				throw new WebSocketException("already connected");
 			}
-			
+
 			socket = createSocket();
 			input = socket.getInputStream();
-			output = new PrintStream(socket.getOutputStream());
-			
+			output = new BufferedOutputStream(socket.getOutputStream());
+
 			output.write(handshake.getHandshake());
-						
+			output.flush();
+
 			boolean handshakeComplete = false;
 			boolean header = true;
-			int len = 1000;
+			int len = 2000;
 			byte[] buffer = new byte[len];
 			int pos = 0;
 			ArrayList<String> handshakeLines = new ArrayList<String>();
-			
+
 			byte[] serverResponse = new byte[16];
-			
+
 			while (!handshakeComplete) {
 				int b = input.read();
 				buffer[pos] = (byte) b;
 				pos += 1;
-				
+
 				if (!header) {
 					serverResponse[pos-1] = (byte)b;
 					if (pos == 16) {
@@ -114,24 +115,24 @@ public class WebSocketConnection
 					else {
 						handshakeLines.add(line.trim());
 					}
-					
+
 					buffer = new byte[len];
 					pos = 0;
 				}
 			}
-			
+
 			handshake.verifyServerStatusLine(handshakeLines.get(0));
 			handshake.verifyServerResponse(serverResponse);
-			
+
 			handshakeLines.remove(0);
-			
+
 			HashMap<String, String> headers = new HashMap<String, String>();
 			for (String line : handshakeLines) {
 				String[] keyValue = line.split(": ", 2);
 				headers.put(keyValue[0], keyValue[1]);
 			}
 			handshake.verifyServerHandshakeHeaders(headers);
-			
+
 			receiver = new WebSocketReceiver(input, this);
 			receiver.start();
 			connected = true;
@@ -143,21 +144,21 @@ public class WebSocketConnection
 		catch (IOException ioe) {
 			throw new WebSocketException("error while connecting: " + ioe.getMessage(), ioe);
 		}
-	}
-	
+			}
+
 
 	public synchronized void send(String data)
 			throws WebSocketException
-	{
+			{
 		if (!connected) {
 			throw new WebSocketException("error while sending text data: not connected");
 		}
-		
+
 		try {
 			output.write(0x00);
 			output.write(data.getBytes(("UTF-8")));
 			output.write(0xff);
-                        output.flush();
+			output.flush();
 		}
 		catch (UnsupportedEncodingException uee) {
 			throw new WebSocketException("error while sending text data: unsupported encoding", uee);
@@ -165,28 +166,26 @@ public class WebSocketConnection
 		catch (IOException ioe) {
 			throw new WebSocketException("error while sending text data", ioe);
 		}
-	}
-	
-	
-//	public synchronized void send(byte[] data)
-//			throws WebSocketException
-//	{
-//		if (!connected) {
-//			throw new WebSocketException("error while sending binary data: not connected");
-//		}
-//		
-//		try {
-//			output.write(0x80);
-//			output.write(data.length);
-//			output.write(data);
-//			output.write("\r\n".getBytes());
-//		}
-//		catch (IOException ioe) {
-//			throw new WebSocketException("error while sending binary data: ", ioe);
-//		}
-//	}
-	
-	
+			}
+
+	public synchronized void send(byte[] data)
+			throws WebSocketException
+			{
+		if (!connected) {
+			throw new WebSocketException("error while sending binary data: not connected");
+		}
+
+		try {
+			output.write(0x80);
+			output.write(data.length);
+			output.write(data);
+			output.write("\r\n".getBytes());
+		}
+		catch (IOException ioe) {
+			throw new WebSocketException("error while sending binary data: ", ioe);
+		}
+			}
+
 	public void handleReceiverError()
 	{
 		try {
@@ -198,55 +197,56 @@ public class WebSocketConnection
 			wse.printStackTrace();
 		}
 	}
-	
+
 
 	public synchronized void close()
-		throws WebSocketException
-	{
+			throws WebSocketException
+			{
 		if (!connected) {
 			return;
 		}
-		
+
 		sendCloseHandshake();
-				
+
 		if (receiver.isRunning()) {
 			receiver.stopit();
 		}
-		
+
 		closeStreams();
 
 		eventHandler.onClose();
-	}
-	
-	
+			}
+
+
 	private synchronized void sendCloseHandshake()
-		throws WebSocketException
-	{
+			throws WebSocketException
+			{
 		if (!connected) {
 			throw new WebSocketException("error while sending close handshake: not connected");
 		}
-		
+
 		try {
-			output.write(0xff00);
-			output.write("\r\n".getBytes());
+			output.write(0xff);
+			output.write(0x00);
+			output.flush();
 		}
 		catch (IOException ioe) {
 			throw new WebSocketException("error while sending close handshake", ioe);
 		}
 
 		connected = false;
-	}
-	
+			}
+
 
 	private Socket createSocket()
 			throws WebSocketException
-	{
+			{
 		String scheme = url.getScheme();
 		String host = url.getHost();
 		int port = url.getPort();
-		
+
 		Socket socket = null;
-		
+
 		if (scheme != null && scheme.equals("ws")) {
 			if (port == -1) {
 				port = 80;
@@ -279,14 +279,14 @@ public class WebSocketConnection
 		else {
 			throw new WebSocketException("unsupported protocol: " + scheme);
 		}
-		
+
 		return socket;
-	}
-	
-	
+			}
+
+
 	private void closeStreams()
-		throws WebSocketException
-	{
+			throws WebSocketException
+			{
 		try {
 			input.close();
 			output.close();
@@ -295,5 +295,5 @@ public class WebSocketConnection
 		catch (IOException ioe) {
 			throw new WebSocketException("error while closing websocket connection: ", ioe);
 		}
-	}
+			}
 }
