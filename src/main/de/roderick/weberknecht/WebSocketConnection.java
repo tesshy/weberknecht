@@ -14,19 +14,35 @@
  *  limitations under the License. 
  */
 
+//0x0	継続フレーム：(FINフラグとともに使用されるもの？すいません。この値もよくわかっていません。)
+//0x1	テキストフレーム：文字列データ hybi-00と同様に、テキストデータの文字コードはUTF-8を使用しなければなりません。
+//      また、テキストフレームを受信した場合はデータがUTF-8の有効な文字列かチェックしなければならなくなりました。
+//0x2	バイナリフレーム：バイナリデータ Firefox10はまだバイナリデータの送受信に対応していません。
+//0x3～0x7	Reserved：未使用
+//0x8	クローズフレーム：このフレームを受信したら接続を切ります。
+//0x9	Pingフレーム：Pingを送る場合はopcodeをこの値に設定して送ります。
+//0xA	Pongフレーム：Pongを返すときにopcodeをこの値に設定します。
+//0xB～0xF	Reserved：未使用
+
 package de.roderick.weberknecht;
 
 import java.io.BufferedOutputStream;
 import java.io.BufferedReader;
+import java.io.ByteArrayOutputStream;
+import java.io.DataOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.Reader;
 import java.io.UnsupportedEncodingException;
+import java.lang.reflect.Array;
 import java.net.Socket;
 import java.net.URI;
 import java.net.UnknownHostException;
+import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import javax.net.SocketFactory;
 import javax.net.ssl.SSLSocketFactory;
@@ -90,7 +106,7 @@ implements WebSocket
 
 			output.write(handshake.getHandshake_hybi10());
 			output.flush();
-			
+
 			BufferedReader reader = new BufferedReader(new InputStreamReader(input));			
 
 			/** Clip StatusLine (that is at the fast line) */
@@ -135,17 +151,7 @@ implements WebSocket
 		}
 
 		try {
-			output.write(0x81);
-			output.write(0x80+data.length());
-
-			byte[] sendData = data.getBytes();
-			byte[] maskedData = new byte[sendData.length];
-			byte[] maskKey = {0x10,0x24,0x10,0x24};
-			for(int i = 0; i < sendData.length; i++){
-			    maskedData[i] = (byte) (sendData[i] ^ maskKey[i % 4]);
-			}
-			output.write(maskKey);
-			output.write(maskedData);
+			output.write(frameEncode(data.getBytes(), (byte)0x01));
 			output.flush();
 		}
 		catch (UnsupportedEncodingException uee) {
@@ -162,15 +168,96 @@ implements WebSocket
 		}
 
 		try {
-			//output.write(0x81);
-			output.write(data.length);
-			output.write(data);
-			output.write("\r\n".getBytes());
+			output.write(frameEncode(data, (byte)0x02));
 		}
 		catch (IOException ioe) {
 			throw new WebSocketException("error while sending binary data: ", ioe);
 		}
 	}
+
+	// サーバー側の実装のためマスク処理は省略しています。
+	// 第1引数：送信するデータ。文字列を送信する場合は、バイト配列にしてからこの関数を呼ぶ。
+	// 第2引数：opcode
+	private byte[] frameEncode(byte[] sendData, byte opcode){
+		byte initByte[];
+		if(sendData.length < 126){
+			initByte = new byte[2];
+			initByte[1] = (byte) (0x80+sendData.length);
+		}else if(sendData.length <= 65536){
+			initByte = new byte[4];
+			initByte[1] = (byte)126;
+
+			// データ長をバイト配列に変換
+			DataOutputStream dos = null;
+			try {
+				ByteArrayOutputStream baos = new ByteArrayOutputStream();
+				dos = new DataOutputStream(baos);
+				int value = sendData.length;
+				dos.writeInt(value);
+				byte[] lenData = baos.toByteArray();
+				// エンディアンが逆なため配列を反転
+				//Collections.reverse(List<byte> lenData);
+				// フレームヘッダーの3バイト目からデータ長をコピー
+				System.arraycopy(lenData, 0, initByte, 2, 2);			
+			} catch (Exception e) {
+				System.out.println(e.getMessage());
+			} finally {
+				try {
+					dos.close();
+				}
+				catch (IOException e) {
+				}
+			}
+		}else{
+			// ヘッダーを10バイトにする
+			initByte = new byte[10];
+			// データ長が65536以上の場合は2バイト目に127を設定
+			initByte[1] = (byte)127;
+			// データ長をバイト配列に変換
+			DataOutputStream dos = null;
+			try {
+				ByteArrayOutputStream baos = new ByteArrayOutputStream();
+				dos = new DataOutputStream(baos);
+				int value = sendData.length;
+				dos.writeInt(value);
+				byte[] lenData = baos.toByteArray();
+				// エンディアンが逆なため配列を反転
+				//Collections.reverse(List<byte> lenData);
+				// フレームヘッダーの3バイト目からデータ長をコピー
+				System.arraycopy(lenData, 0, initByte, 2, 2);			
+			} catch (Exception e) {
+				System.out.println(e.getMessage());
+			} finally {
+				try {
+					dos.close();
+				}
+				catch (IOException e) {
+				}
+			}
+		}
+
+		// FINフラグとopcodeを設定する
+		initByte[0] = (byte) (0x80 | opcode);
+
+		// Mask生成
+		byte[] maskedData = new byte[sendData.length];
+		byte[] maskKey = {0x10,0x24,0x10,0x24};
+		for(int i = 0; i < sendData.length; i++){
+			maskedData[i] = (byte) (sendData[i] ^ maskKey[i % 4]);
+		}
+
+		// ヘッダーと送信データをつなげる
+		byte[] webSocketFrame = new byte[initByte.length + maskKey.length + maskedData.length];
+		System.arraycopy(initByte, 0, webSocketFrame, 0, initByte.length);
+		System.arraycopy(maskKey, 0, webSocketFrame, initByte.length, maskKey.length);
+		System.arraycopy(maskedData, 0, webSocketFrame, initByte.length + maskKey.length, maskedData.length);
+		// 作成したフレームを戻す
+		 for (int i = 0; i < webSocketFrame.length; i++) {
+		        System.out.println(Integer.toHexString(webSocketFrame[i] & 0xff));
+		    }
+		return webSocketFrame;
+	}
+
 
 	public void handleReceiverError(){
 		try {
