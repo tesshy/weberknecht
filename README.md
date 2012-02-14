@@ -4,6 +4,14 @@ weberknecht - Java WebSocket Client Library
 Weberknecht is a Java implementation of the client side of the IETF WebSocket Protocol Draft
 draft-ietf-hybi-thewebsocketprotocol-00 (May 23, 2010) for use in Java SE or Android applications.
 
+##Note
+This fork is changed by tesshy.
+
+Goal is satisfy with RFC 6455, like WebSocket Version 13.
+
+Now, I tested Handshake, Sending Text and Binary.
+Handshake is not full implementation, because not checking accept header.
+
 
 Usage
 -----
