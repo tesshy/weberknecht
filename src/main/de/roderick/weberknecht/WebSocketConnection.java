@@ -17,8 +17,11 @@
 package de.roderick.weberknecht;
 
 import java.io.BufferedOutputStream;
+import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.Reader;
 import java.io.UnsupportedEncodingException;
 import java.net.Socket;
 import java.net.URI;
@@ -43,6 +46,9 @@ implements WebSocket
 
 	private WebSocketReceiver receiver = null;
 	private WebSocketHandshake handshake = null;
+
+	private boolean handshakeComplete = false;
+	private boolean header = true;
 
 
 	public WebSocketConnection(URI url)
@@ -72,9 +78,7 @@ implements WebSocket
 	}
 
 
-	public void connect()
-			throws WebSocketException
-			{
+	public void connect() throws WebSocketException{
 		try {
 			if (connected) {
 				throw new WebSocketException("already connected");
@@ -84,53 +88,31 @@ implements WebSocket
 			input = socket.getInputStream();
 			output = new BufferedOutputStream(socket.getOutputStream());
 
-			output.write(handshake.getHandshake());
+			output.write(handshake.getHandshake_hybi10());
 			output.flush();
+			
+			BufferedReader reader = new BufferedReader(new InputStreamReader(input));			
 
-			boolean handshakeComplete = false;
-			boolean header = true;
-			int len = 2000;
-			byte[] buffer = new byte[len];
-			int pos = 0;
+			/** Clip StatusLine (that is at the fast line) */
+			String StatusLine = reader.readLine();
+			handshake.verifyServerStatusLine(StatusLine);
+
+			/** map the Handshake result */
 			ArrayList<String> handshakeLines = new ArrayList<String>();
-
-			byte[] serverResponse = new byte[16];
-
-			while (!handshakeComplete) {
-				int b = input.read();
-				buffer[pos] = (byte) b;
-				pos += 1;
-
-				if (!header) {
-					serverResponse[pos-1] = (byte)b;
-					if (pos == 16) {
-						handshakeComplete = true;
-					}
-				}
-				else if (buffer[pos-1] == 0x0A && buffer[pos-2] == 0x0D) {
-					String line = new String(buffer, "UTF-8");
-					if (line.trim().equals("")) {
-						header = false;
-					}
-					else {
-						handshakeLines.add(line.trim());
-					}
-
-					buffer = new byte[len];
-					pos = 0;
-				}
+			while(true){
+				String t = reader.readLine();
+				if(t.length()==0) break;
+				handshakeLines.add(t);
 			}
-
-			handshake.verifyServerStatusLine(handshakeLines.get(0));
-			handshake.verifyServerResponse(serverResponse);
-
-			handshakeLines.remove(0);
 
 			HashMap<String, String> headers = new HashMap<String, String>();
 			for (String line : handshakeLines) {
 				String[] keyValue = line.split(": ", 2);
 				headers.put(keyValue[0], keyValue[1]);
 			}
+
+			//handshake.verifyServerResponse(serverResponse);
+
 			handshake.verifyServerHandshakeHeaders(headers);
 
 			receiver = new WebSocketReceiver(input, this);
@@ -144,20 +126,26 @@ implements WebSocket
 		catch (IOException ioe) {
 			throw new WebSocketException("error while connecting: " + ioe.getMessage(), ioe);
 		}
-			}
+	}
 
 
-	public synchronized void send(String data)
-			throws WebSocketException
-			{
+	public synchronized void send(String data) throws WebSocketException{
 		if (!connected) {
 			throw new WebSocketException("error while sending text data: not connected");
 		}
 
 		try {
-			output.write(0x00);
-			output.write(data.getBytes(("UTF-8")));
-			output.write(0xff);
+			output.write(0x81);
+			output.write(0x80+data.length());
+
+			byte[] sendData = data.getBytes();
+			byte[] maskedData = new byte[sendData.length];
+			byte[] maskKey = {0x10,0x24,0x10,0x24};
+			for(int i = 0; i < sendData.length; i++){
+			    maskedData[i] = (byte) (sendData[i] ^ maskKey[i % 4]);
+			}
+			output.write(maskKey);
+			output.write(maskedData);
 			output.flush();
 		}
 		catch (UnsupportedEncodingException uee) {
@@ -166,17 +154,15 @@ implements WebSocket
 		catch (IOException ioe) {
 			throw new WebSocketException("error while sending text data", ioe);
 		}
-			}
+	}
 
-	public synchronized void send(byte[] data)
-			throws WebSocketException
-			{
+	public synchronized void send(byte[] data) throws WebSocketException{
 		if (!connected) {
 			throw new WebSocketException("error while sending binary data: not connected");
 		}
 
 		try {
-			output.write(0x80);
+			//output.write(0x81);
 			output.write(data.length);
 			output.write(data);
 			output.write("\r\n".getBytes());
@@ -184,10 +170,9 @@ implements WebSocket
 		catch (IOException ioe) {
 			throw new WebSocketException("error while sending binary data: ", ioe);
 		}
-			}
+	}
 
-	public void handleReceiverError()
-	{
+	public void handleReceiverError(){
 		try {
 			if (connected) {
 				close();
@@ -199,9 +184,7 @@ implements WebSocket
 	}
 
 
-	public synchronized void close()
-			throws WebSocketException
-			{
+	public synchronized void close() throws WebSocketException{
 		if (!connected) {
 			return;
 		}
@@ -215,12 +198,10 @@ implements WebSocket
 		closeStreams();
 
 		eventHandler.onClose();
-			}
+	}
 
 
-	private synchronized void sendCloseHandshake()
-			throws WebSocketException
-			{
+	private synchronized void sendCloseHandshake() throws WebSocketException{
 		if (!connected) {
 			throw new WebSocketException("error while sending close handshake: not connected");
 		}
@@ -235,12 +216,10 @@ implements WebSocket
 		}
 
 		connected = false;
-			}
+	}
 
 
-	private Socket createSocket()
-			throws WebSocketException
-			{
+	private Socket createSocket() throws WebSocketException{
 		String scheme = url.getScheme();
 		String host = url.getHost();
 		int port = url.getPort();
@@ -281,12 +260,10 @@ implements WebSocket
 		}
 
 		return socket;
-			}
+	}
 
 
-	private void closeStreams()
-			throws WebSocketException
-			{
+	private void closeStreams() throws WebSocketException{
 		try {
 			input.close();
 			output.close();
@@ -295,5 +272,5 @@ implements WebSocket
 		catch (IOException ioe) {
 			throw new WebSocketException("error while closing websocket connection: ", ioe);
 		}
-			}
+	}
 }
